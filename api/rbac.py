@@ -31,6 +31,12 @@ ROLE_PERMISSIONS: Dict[str, Dict[str, List[str]]] = {
         "notifications": ["create", "read"],
         "hl7": ["read"],
     },
+    "PATIENT": {
+        "patients": ["create", "read", "update", "export"],
+        "appointments": ["create", "read", "update"],
+        "telemedicine": ["read"],
+        "notifications": ["read"],
+    },
     "VIEWER": {"*": ["read"]},
 }
 

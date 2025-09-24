@@ -1,9 +1,11 @@
 """Serializers for the FHIR Patient Portal API."""
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List
 
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -32,9 +34,114 @@ from .models import (
     TelemedicineSession,
     UserRole,
     WaitlistEntry,
+    PHONE_VALIDATOR,
 )
 
 User = get_user_model()
+
+
+class RegistrationProfileSerializer(serializers.Serializer):
+    first_name = serializers.CharField(max_length=150)
+    last_name = serializers.CharField(max_length=150)
+    phone = serializers.CharField(max_length=32, allow_blank=True, required=False)
+    date_of_birth = serializers.DateField(required=False)
+
+    def validate_phone(self, value: str) -> str:
+        if value:
+            PHONE_VALIDATOR(value)
+        return value
+
+    def validate_date_of_birth(self, value):  # type: ignore[override]
+        if value and value > timezone.now().date():
+            raise serializers.ValidationError("date_of_birth cannot be in the future")
+        return value
+
+
+class UserRegistrationSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True, min_length=8)
+    confirm_password = serializers.CharField(write_only=True)
+    profile = RegistrationProfileSerializer()
+    accept_terms = serializers.BooleanField()
+    verification_method = serializers.ChoiceField(
+        choices=[("email", "email"), ("sms", "sms")],
+        default="email",
+    )
+
+    password_rules = (
+        (re.compile(r"[A-Z]"), "include at least one uppercase letter"),
+        (re.compile(r"[a-z]"), "include at least one lowercase letter"),
+        (re.compile(r"[0-9]"), "include at least one digit"),
+        (re.compile(r"[^A-Za-z0-9]"), "include at least one special character"),
+    )
+
+    def validate_email(self, value: str) -> str:
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
+
+    def validate_password(self, value: str) -> str:
+        missing = [message for pattern, message in self.password_rules if not pattern.search(value)]
+        if missing:
+            raise serializers.ValidationError(
+                "Password must " + ", ".join(missing) + "."
+            )
+        return value
+
+    def validate(self, attrs: Dict[str, Any]) -> Dict[str, Any]:
+        if attrs.get("password") != attrs.get("confirm_password"):
+            raise serializers.ValidationError({"confirm_password": "Passwords do not match."})
+        if not attrs.get("accept_terms"):
+            raise serializers.ValidationError({"accept_terms": "You must accept the terms to register."})
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data: Dict[str, Any]):
+        profile_data = validated_data.pop("profile")
+        validated_data.pop("confirm_password")
+        verification_method = validated_data.pop("verification_method", "email")
+        validated_data.pop("accept_terms", None)
+
+        email = validated_data["email"]
+        password = validated_data["password"]
+
+        user = User.objects.create_user(
+            username=email,
+            email=email,
+            password=password,
+            first_name=profile_data.get("first_name", ""),
+            last_name=profile_data.get("last_name", ""),
+        )
+
+        profile = getattr(user, "profile", None)
+        if profile:
+            profile.phone = profile_data.get("phone", "")
+            profile.date_of_birth = profile_data.get("date_of_birth")
+            metadata = profile.device_info or {}
+            metadata.update(
+                {
+                    "verification_method": verification_method,
+                    "terms_accepted_at": timezone.now().isoformat(),
+                }
+            )
+            profile.device_info = metadata
+            profile.save()
+
+        patient_role = Role.objects.filter(name__iexact="PATIENT").first()
+        if patient_role:
+            UserRole.objects.create(user=user, role=patient_role, reason="Self registration")
+
+        self.instance = user
+        return user
+
+    def to_representation(self, instance: User) -> Dict[str, Any]:
+        from .rbac import get_user_roles
+
+        return {
+            "id": instance.pk,
+            "email": instance.email,
+            "roles": get_user_roles(instance),
+        }
 
 
 class RoleSerializer(serializers.ModelSerializer):

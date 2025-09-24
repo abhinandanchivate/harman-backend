@@ -61,6 +61,7 @@ from .serializers import (
     TelemedicineConsentSerializer,
     TelemedicineMetricSerializer,
     TelemedicineSessionSerializer,
+    UserRegistrationSerializer,
     UserRoleAssignSerializer,
     UserRoleSerializer,
     WaitlistEntrySerializer,
@@ -68,6 +69,18 @@ from .serializers import (
 )
 from .permissions import ActionPermissionMixin, IsAdmin
 from .rbac import ROLE_PERMISSIONS
+
+
+class UserRegistrationView(APIView):
+    """Allow new users to self-register with validation."""
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        serializer = UserRegistrationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 class RoleProtectedModelViewSet(ActionPermissionMixin, viewsets.ModelViewSet):

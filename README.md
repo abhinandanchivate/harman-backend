@@ -5,7 +5,7 @@ This repository provides a Django REST Framework implementation of the FHIR Pati
 ## Features
 
 - Django REST Framework API with JWT authentication via SimpleJWT.
-- Role-Based Access Control with default roles (ADMIN, MANAGER, STAFF, VIEWER).
+- Role-Based Access Control with default roles (ADMIN, MANAGER, STAFF, PATIENT, VIEWER).
 - CRUD endpoints for patients, observations, appointments, notifications, analytics, audit logging, and more.
 - HL7 ingestion service with batch processing endpoints.
 - Telemedicine session, consent, and metrics APIs.
@@ -58,11 +58,18 @@ The API will be available at `http://localhost:8000/`. Visit `/api/docs/` for th
 
 Import the `postman_collection.json` file into Postman. The collection includes:
 
-- Auth folder (`/api/auth/login/`, `/api/auth/refresh/`, `/api/auth/me/`)
+- Auth folder (`/api/auth/register/`, `/api/auth/login/`, `/api/auth/refresh/`, `/api/auth/me/`)
 - Admin folder for role management
 - Folder per entity with CRUD examples and validation test scripts
 
 Update the `BASE_URL`, `ACCESS_TOKEN`, and `REFRESH_TOKEN` variables in the collection environment to match your environment.
+
+### User Registration
+
+End users can self-register by sending a `POST` request to `/api/auth/register/` with their contact details, strong password, and
+acceptance of the terms of service. The endpoint enforces password complexity (mixed case, number, special character), requires
+matching password confirmation, validates phone and birthdate formats, and ensures email uniqueness before creating the account.
+Successful registrations are automatically assigned the `PATIENT` role and linked profile metadata for downstream RBAC checks.
 
 ## Testing
 

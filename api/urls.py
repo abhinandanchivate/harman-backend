@@ -23,6 +23,7 @@ from .views import (
     TelemedicineConsentViewSet,
     TelemedicineMetricViewSet,
     TelemedicineSessionViewSet,
+    UserRegistrationView,
     WaitlistViewSet,
 )
 
@@ -52,5 +53,6 @@ urlpatterns = [
     path("auth/login/", CustomTokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("auth/refresh/", CustomTokenRefreshView.as_view(), name="token_refresh"),
     path("auth/me/", MeAPIView.as_view(), name="auth_me"),
+    path("auth/register/", UserRegistrationView.as_view(), name="auth_register"),
     path("admin/users/assign-role/", RoleManagementView.as_view(), name="assign_role"),
 ]
